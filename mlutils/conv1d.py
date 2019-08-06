@@ -28,14 +28,15 @@ def reznet_block(x: tf.Tensor, bach_norm: bool = False) -> tf.Tensor:
     y = layers.Activation("relu")(y)
     y = layers.Conv1D(channels, kernel_size=3, strides=1, padding="same")(y)
 
-    y = layers.add([y, x])
+    y = layers.add([x, y])
     return y
 
 
 def reznet_bottleneck_block(x: tf.Tensor, bach_norm: bool = False) -> tf.Tensor:
     """Обычный узкий и длинный блок RezNet для глубоких сетей.
 
-    По вычислительной сложности при числе каналов в 4 раза больше обычного блока имеет сопоставимое число параметров и
+    Используется предактивация и пропуск скип соединения без каких-либо модификаций, как сделано в v2.
+    По вычислительной сложности при числе каналов в 3 раза больше обычного блока имеет сопоставимое число параметров и
     вычислительную сложность.
 
     :param x:
@@ -63,7 +64,37 @@ def reznet_bottleneck_block(x: tf.Tensor, bach_norm: bool = False) -> tf.Tensor:
     y = layers.Activation("relu")(y)
     y = layers.Conv1D(channels, kernel_size=1, strides=1, padding="same")(y)
 
-    y = layers.add([y, x])
+    y = layers.add([x, y])
+    return y
+
+
+def densenet_block(x: tf.Tensor, channels: int, bach_norm: bool = False) -> tf.Tensor:
+    """Обычный блок DenseNet.
+
+    Используется меньше входных каналов. При том же числе параметров обычно лучше RezNet.
+
+    :param x:
+        Тензор из 1D сверточной сети вида (None, time_steps, channels).
+    :param channels:
+        На входе первого блока.
+    :param bach_norm:
+        Нужна ли бач-нормализация.
+    :return:
+        Исходящий 1D сверточной сети вида (None, time_steps, channels).
+    """
+    y = x
+
+    if bach_norm:
+        y = layers.BatchNormalization()(y)
+    y = layers.Activation("relu")(y)
+    y = layers.Conv1D(4 * channels, kernel_size=1, strides=1, padding="same")(y)
+
+    if bach_norm:
+        y = layers.BatchNormalization()(y)
+    y = layers.Activation("relu")(y)
+    y = layers.Conv1D(channels, kernel_size=3, strides=1, padding="same")(y)
+
+    y = layers.concatenate([x, y])
     return y
 
 
