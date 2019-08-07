@@ -1,4 +1,5 @@
 """Различные архитектурные элементы сверточных сетей для 1d."""
+import functools
 from enum import Enum
 from typing import Callable
 from typing import Optional
@@ -83,48 +84,38 @@ def se_block(x: tf.Tensor, ratio: Optional[int] = None) -> tf.Tensor:
 
 def reznet_link(
         x: tf.Tensor,
-        channels: int,
-        layers_func: Callable[[tf.Tensor, int, bool], tf.Tensor],
-        bach_norm: bool = False) -> tf.Tensor:
+        layers_func: Callable[[tf.Tensor], tf.Tensor],
+) -> tf.Tensor:
     """Остаточное соединение из RezNet.
 
     :param x:
         Тензор из 1D сверточной сети вида (None, time_steps, channels).
-    :param channels:
-        На входе первого блока.
     :param layers_func:
         Функция с основными слоями преобразования сети.
-    :param bach_norm:
-        Нужна ли бач-нормализация основных слоев.
     :return:
         Результат применения основного преобразования и скипа.
     """
     y = x
-    y = layers_func(y, channels, bach_norm)
+    y = layers_func(y)
     y = layers.add([x, y])
     return y
 
 
 def densenet_link(
         x: tf.Tensor,
-        channels: int,
-        layers_func: Callable[[tf.Tensor, int, bool], tf.Tensor],
-        bach_norm: bool = False) -> tf.Tensor:
+        layers_func: Callable[[tf.Tensor], tf.Tensor]
+) -> tf.Tensor:
     """Остаточное соединение из DenseNet.
 
     :param x:
         Тензор из 1D сверточной сети вида (None, time_steps, channels).
-    :param channels:
-        На входе первого блока.
     :param layers_func:
         Функция с основными слоями преобразования сети.
-    :param bach_norm:
-        Нужна ли бач-нормализация основных слоев.
     :return:
         Результат применения основного преобразования и скипа.
     """
     y = x
-    y = layers_func(y, channels, bach_norm)
+    y = layers_func(y)
     y = layers.concatenate([x, y])
     return y
 
@@ -159,7 +150,7 @@ def make_net(
     :param bach_norm:
         Нужна ли бач-нормализация основных слоев.
     :param se:
-        Нужно ли взвесить блок с помощью squeeze-and-Excitation.
+        Нужно ли взвесить блок с помощью Squeeze-and-Excitation.
     :return:
         Результирующий тензор.
     """
@@ -171,8 +162,14 @@ def make_net(
         activation=None
     )(x)
     for _ in range(blocks):
-        y = layers_type.value(y, channels, bach_norm)
+        layers_func = functools.partial(layers_type, channels=channels, bach_norm=bach_norm)
+
+        def se_wrap(tensor: tf.Tensor) -> tf.Tensor:
+            """Обертка Squeeze-and-Excitation."""
+            return se_block(layers_func(tensor))
+
         if se:
-            y = se_block(y)
-        y = link.value(y)
+            layers_func = se_wrap
+
+        y = link(y, layers_func)
     return y
