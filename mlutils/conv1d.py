@@ -161,7 +161,7 @@ def make_net(
         padding="same",
         activation=None
     )(x)
-    for _ in range(blocks):
+    for i in range(blocks):
         layers_func = functools.partial(layers_type, channels=channels, bach_norm=bach_norm)
 
         def se_wrap(tensor: tf.Tensor) -> tf.Tensor:
@@ -169,7 +169,7 @@ def make_net(
             return se_block(layers_func(tensor))
 
         if se:
-            layers_func = se_wrap
-
-        y = link(y, layers_func)
+            y = link(y, se_wrap)
+        else:
+            y = link(y, layers_func)
     return y
